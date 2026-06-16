@@ -1,0 +1,10 @@
+[package]
+name = "posix-ish-ls"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "ls"
+path = "src/main.rs"
+
+[dependencies]
