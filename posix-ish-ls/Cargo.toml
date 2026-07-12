@@ -8,3 +8,5 @@ name = "ls"
 path = "src/main.rs"
 
 [dependencies]
+libc.workspace = true
+posix-ish-utils.workspace = true

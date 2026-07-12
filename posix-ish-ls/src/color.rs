@@ -1,16 +1,16 @@
-use crate::{
-    error::{Result, ToLsResult},
-    file::{FileInfo, FileType},
-};
+use crate::file::{FileInfo, FileType};
+use posix_ish_utils::error::{Result, ToLsResult};
 use std::env;
 
 /// https://gist.github.com/thomd/7667642
 pub trait Colorizer {
-    fn apply(&self, file: &FileInfo) -> String;
+    /// Returns the stylized string and how many characters were added in total for the
+    /// ANSI-escapes.
+    fn apply(&self, file: &FileInfo) -> (String, usize);
 }
 
 pub fn init_colorizer() -> Result<Box<dyn Colorizer>> {
-    if env::var_os("NO_COLOR").is_some_and(|v| v.is_empty()) {
+    if env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) {
         return Ok(Box::new(NoColor));
     }
 
@@ -70,22 +70,25 @@ struct LsColor {
 struct NoColor;
 
 impl Colorizer for NoColor {
-    fn apply(&self, file: &FileInfo) -> String {
-        file.name.to_string_lossy().to_string()
+    fn apply(&self, file: &FileInfo) -> (String, usize) {
+        (file.name.clone(), 0)
     }
 }
 
 impl Colorizer for LsColor {
-    fn apply(&self, file: &FileInfo) -> String {
-        let file_name = file.name.to_string_lossy();
+    fn apply(&self, file: &FileInfo) -> (String, usize) {
+        const BASE_NUM_ANSI_CHARS: usize = 7;
+
+        let file_name = &file.name;
 
         macro_rules! color {
-            ($ft:expr, $name:expr) => {
-                format!("\x1b[{}m{}\x1b[0m", $ft, $name)
-            };
+            ($ft:expr, $name:expr) => {{
+                let num_ansi_chars = BASE_NUM_ANSI_CHARS + $ft.len();
+                (format!("\x1b[{}m{}\x1b[0m", $ft, $name), num_ansi_chars)
+            }};
         }
 
-        if file.is_executable() && !matches!(file.file_type, FileType::Dir) {
+        if file.is_executable() && !matches!(file.file_type, FileType::Dir | FileType::SymLink) {
             return color!(self.ex, file_name);
         }
 

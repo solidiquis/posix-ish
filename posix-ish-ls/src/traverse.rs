@@ -1,8 +1,8 @@
 use crate::{
     arg::{FollowLinks, ProgramBehavior},
-    error::{Result, ToLsResult},
     file::{FileInfo, FileType},
 };
+use posix_ish_utils::error::{Result, ToLsResult};
 use std::{
     collections::{HashMap, HashSet},
     ffi::{OsStr, OsString},
@@ -24,7 +24,12 @@ pub fn traverse(root: &OsStr, pb: &ProgramBehavior) -> Result<Vec<FileInfo>> {
     }
     .io_error("failed to query operand metadata")?;
 
-    let root_info = FileInfo::try_from((root, &root_md))?;
+    let root_info = {
+        let mut root = FileInfo::try_from((root, &root_md))?;
+        root.name = ".".to_string();
+        root.hidden = true;
+        root
+    };
 
     if !root_md.is_dir() {
         return Ok(vec![root_info]);

@@ -36,6 +36,14 @@ impl Error {
             msg: msg.into(),
         }
     }
+
+    pub fn io_error<S: Into<String>>(msg: S) -> Self {
+        Self {
+            code: Code::Io,
+            inner: None,
+            msg: msg.into(),
+        }
+    }
 }
 
 impl<T> From<Error> for Result<T> {

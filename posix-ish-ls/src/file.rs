@@ -1,13 +1,10 @@
+use crate::arg::{FollowLinks, OutputFormat, ProgramBehavior, Sort};
+use posix_ish_utils::error::{Error, Result, ToLsResult};
 use std::{
-    ffi::{OsStr, OsString},
+    ffi::OsStr,
     fs::{self, DirEntry, Metadata},
     os::unix::fs::{FileTypeExt, MetadataExt},
     path::PathBuf,
-};
-
-use crate::{
-    arg::{FollowLinks, OutputFormat, ProgramBehavior, Sort},
-    error::{Error, Result, ToLsResult},
 };
 
 /// 512B
@@ -15,11 +12,11 @@ const BLKSIZE: u64 = 512;
 
 #[derive(Default)]
 pub struct FileInfo {
-    pub name: OsString,
+    pub name: String,
     pub path: PathBuf,
     pub file_type: FileType,
     pub hidden: bool,
-    pub referent: Option<OsString>,
+    pub referent: Option<PathBuf>,
     pub ino: u64,
     pub nlink: u64,
     pub uid: u32,
@@ -31,7 +28,7 @@ pub struct FileInfo {
     pub ctime: i64,
 }
 
-#[derive(Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub enum FileType {
     File,
     Dir,
@@ -46,34 +43,39 @@ pub enum FileType {
 
 impl FileInfo {
     pub fn try_new(entry: DirEntry, behavior: &ProgramBehavior) -> Result<Self> {
-        let name = entry.file_name();
+        let name = entry.file_name().to_string_lossy().to_string();
         let path = entry.path();
         let file_type = entry.file_type().map_or(FileType::Unknown, FileType::from);
-        let hidden = name.to_string_lossy().starts_with('.');
+        let hidden = name.starts_with('.');
+
+        let referent = if matches!(file_type, FileType::SymLink) {
+            let target = entry
+                .path()
+                .canonicalize()
+                .io_error("failed to resolve link")?;
+            Some(target)
+        } else {
+            None
+        };
 
         if !Self::need_metadata(behavior) {
             return Ok(Self {
                 name,
                 path,
                 hidden,
+                referent,
                 file_type,
                 ..Default::default()
             });
         }
-
-        let mut referent = None;
         let metadata = match behavior.follow_links {
             FollowLinks::NoFollow => entry.metadata(),
-            _ if file_type != FileType::SymLink => entry.metadata(),
             _ => {
-                let target = entry
-                    .path()
-                    .canonicalize()
-                    .io_error("failed to resolve link")?;
-
-                referent = target.file_name().map(|s| s.to_os_string());
-
-                fs::metadata(target)
+                if let Some(target) = &referent {
+                    fs::metadata(target)
+                } else {
+                    entry.metadata()
+                }
             }
         }
         .io_error("failed to read file metadata")?;
@@ -125,10 +127,14 @@ impl TryFrom<(&OsStr, &Metadata)> for FileInfo {
     fn try_from((path, md): (&OsStr, &Metadata)) -> Result<Self> {
         let path = PathBuf::from(path);
         let name = path
+            .canonicalize()
+            .io_error("failed to canonicalize provided path")?
             .file_name()
-            .map(|s| s.to_os_string())
-            .io_error("expect valid file name")?;
-        let hidden = name.to_string_lossy().starts_with('.');
+            .map_or_else(
+                || format!("{}", path.display()),
+                |s| s.to_os_string().to_string_lossy().to_string(),
+            );
+        let hidden = name.starts_with('.');
         let file_type = FileType::from(md.file_type());
         let ino = md.ino();
         let uid = md.uid();
@@ -139,7 +145,14 @@ impl TryFrom<(&OsStr, &Metadata)> for FileInfo {
         let atime = md.atime();
         let mtime = md.mtime();
         let ctime = md.ctime();
-        let referent = None;
+
+        let referent = if matches!(file_type, FileType::SymLink) {
+            let target = path.canonicalize().io_error("failed to resolve link")?;
+
+            Some(target)
+        } else {
+            None
+        };
 
         Ok(Self {
             name,

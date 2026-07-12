@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "posix-ish-ls",
+    "posix-ish-utils",
 ]
 resolver = "2"
 
@@ -9,3 +10,5 @@ edition = "2024"
 version = "0.1.0"
 
 [workspace.dependencies]
+libc = { version = "0.2" }
+posix-ish-utils = { version = "0.1.0", path = "posix-ish-utils" }

@@ -1,4 +1,4 @@
-use crate::error::{Error, Result, ToLsResult};
+use posix_ish_utils::error::{Error, Result, ToLsResult};
 use std::{
     env::{ArgsOs, current_dir},
     ffi::OsString,
@@ -158,6 +158,8 @@ pub enum Sort {
     Access,
     /// `-c`
     Status,
+    /// `-X`
+    Alphabetical,
 }
 
 /// For exhaustive matching
@@ -187,6 +189,7 @@ pub enum Opt {
     UpperL,
     UpperR,
     UpperS,
+    UpperX,
     Number1,
 }
 
@@ -230,6 +233,7 @@ impl TryFrom<char> for Opt {
             'L' => Ok(Self::UpperL),
             'R' => Ok(Self::UpperR),
             'S' => Ok(Self::UpperS),
+            'X' => Ok(Self::UpperX),
             '1' => Ok(Self::Number1),
             _ => Error::invalid_argument(format!("invalid option '-{opt}'")).into(),
         }
@@ -263,6 +267,7 @@ impl fmt::Display for Opt {
             Self::UpperL => write!(f, "-L"),
             Self::UpperR => write!(f, "-R"),
             Self::UpperS => write!(f, "-S"),
+            Self::UpperX => write!(f, "-X"),
             Self::Number1 => write!(f, "-1"),
         }
     }
@@ -424,7 +429,7 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
                     }
 
                     // GROUP: Sorting (BEGIN)
-                    Opt::LowerC | Opt::LowerU | Opt::LowerT | Opt::UpperS => {
+                    Opt::LowerC | Opt::LowerU | Opt::LowerT | Opt::UpperS | Opt::UpperX => {
                         if disable_sort {
                             continue;
                         }
@@ -433,16 +438,16 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
                         {
                             let msg = format!("`{option}` cannot but used with `{pkey}`");
                             return Error::invalid_argument(msg).into();
-                        } else {
-                            behavior.sort = match option {
-                                Opt::LowerC => Sort::Status,
-                                Opt::LowerU => Sort::Access,
-                                Opt::LowerT => Sort::Mod,
-                                Opt::UpperS => Sort::Size,
-                                _ => unreachable!(),
-                            };
-                            sort_pkey = Some(option);
                         }
+                        behavior.sort = match option {
+                            Opt::LowerC => Sort::Status,
+                            Opt::LowerU => Sort::Access,
+                            Opt::LowerT => Sort::Mod,
+                            Opt::UpperS => Sort::Size,
+                            Opt::UpperX => Sort::Alphabetical,
+                            _ => unreachable!(),
+                        };
+                        sort_pkey = Some(option);
                     }
                     // GROUP: Sorting (END)
 

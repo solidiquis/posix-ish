@@ -1,8 +1,8 @@
+use posix_ish_utils::error::Result;
 use std::process::ExitCode;
 
 mod arg;
 mod color;
-mod error;
 mod file;
 mod output;
 mod traverse;
@@ -20,7 +20,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> error::Result<()> {
+fn run() -> Result<()> {
     let args = std::env::args_os();
     let (operands, behavior) = arg::parse(args)?;
 
