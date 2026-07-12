@@ -1,7 +1,12 @@
 use std::process::ExitCode;
 
-mod argparse;
+mod arg;
+mod color;
 mod error;
+mod file;
+mod output;
+mod traverse;
+use traverse::traverse;
 
 const BIN_NAME: &str = "ls";
 
@@ -17,13 +22,18 @@ fn main() -> ExitCode {
 
 fn run() -> error::Result<()> {
     let args = std::env::args_os();
-    let (_operands, behavior) = argparse::parse(args)?;
+    let (operands, behavior) = arg::parse(args)?;
 
     if behavior.show_help {
         let version = env!("CARGO_PKG_VERSION");
-        let help = argparse::help_text(BIN_NAME, version);
+        let help = arg::help_text(BIN_NAME, version);
         println!("{help}");
         return Ok(());
+    }
+
+    for dir in operands {
+        let entries = traverse(&dir, &behavior)?;
+        output::print(entries, &behavior)?;
     }
 
     Ok(())

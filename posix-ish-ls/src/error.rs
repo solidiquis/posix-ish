@@ -1,24 +1,40 @@
-use std::fmt::{self, Display};
+use std::{
+    error::Error as StdError,
+    fmt::{self, Display},
+};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub trait ToLrsResult<T> {
+pub trait ToLsResult<T> {
     fn invalid_argument<S: Into<String>>(self, msg: S) -> Result<T>;
+    fn io_error<S: Into<String>>(self, msg: S) -> Result<T>;
+    fn internal<S: Into<String>>(self, msg: S) -> Result<T>;
 }
 
 #[derive(Debug)]
-pub enum Error {
-    InvalidArgument(String),
-    Unreachable,
+pub struct Error {
+    code: Code,
+    inner: Option<Box<dyn StdError>>,
+    msg: String,
+}
+
+#[derive(Debug)]
+pub enum Code {
+    /// User provided in invalid argument
+    InvalidArgument,
+    /// IO error
+    Io,
+    /// Internal unexpected error
+    Internal,
 }
 
 impl Error {
     pub fn invalid_argument<S: Into<String>>(msg: S) -> Self {
-        Self::InvalidArgument(msg.into())
-    }
-
-    pub fn unreachable() -> Self {
-        Self::Unreachable
+        Self {
+            code: Code::InvalidArgument,
+            inner: None,
+            msg: msg.into(),
+        }
     }
 }
 
@@ -31,7 +47,7 @@ impl<T> From<Error> for Result<T> {
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         macro_rules! write_err {
-            ($category:expr, $ctx:expr, $inner:expr) => {
+            ($code:expr, $ctx:expr, $inner:expr) => {
                 write!(
                     f,
                     "error: {}\n\n\
@@ -39,39 +55,110 @@ impl Display for Error {
                     - {}\n  \
                     - {}
                     ",
-                    $category,
-                    $ctx,
-                    $inner,
+                    $code, $ctx, $inner,
                 )
             };
-            ($category:expr, $ctx:expr) => {
+            ($code:expr, $ctx:expr) => {
                 write!(
                     f,
                     "error: {}\n\n\
                     Caused by:\n  \
                     - {}
                     ",
-                    $category,
-                    $ctx
+                    $code, $ctx
                 )
             };
         }
-        match self {
-            Self::InvalidArgument(msg) => {
-                write_err!("InvalidArgument", msg)
+        match &self.inner {
+            Some(err) => {
+                write_err!(self.code, self.msg, err)
             }
-            Self::Unreachable => {
-                write_err!("Unreachable", "this error shouldn't happen")
+            None => {
+                write_err!(self.code, self.msg)
             }
         }
     }
 }
 
-impl<T, E> ToLrsResult<T> for std::result::Result<T, E> {
+impl Display for Code {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidArgument => write!(f, "InvalidArgument"),
+            Self::Io => write!(f, "I/O"),
+            Self::Internal => write!(f, "Internal"),
+        }
+    }
+}
+
+impl<T, E> ToLsResult<T> for std::result::Result<T, E>
+where
+    E: std::error::Error + 'static,
+{
     fn invalid_argument<S: Into<String>>(self, msg: S) -> Result<T> {
         match self {
             Ok(val) => Ok(val),
-            Err(_err) => Err(Error::InvalidArgument(msg.into()))
+            Err(err) => Err(Error {
+                code: Code::InvalidArgument,
+                inner: Some(Box::new(err)),
+                msg: msg.into(),
+            }),
+        }
+    }
+
+    fn io_error<S: Into<String>>(self, msg: S) -> Result<T> {
+        match self {
+            Ok(val) => Ok(val),
+            Err(err) => Err(Error {
+                code: Code::Io,
+                inner: Some(Box::new(err)),
+                msg: msg.into(),
+            }),
+        }
+    }
+
+    fn internal<S: Into<String>>(self, msg: S) -> Result<T> {
+        match self {
+            Ok(val) => Ok(val),
+            Err(err) => Err(Error {
+                code: Code::Internal,
+                inner: Some(Box::new(err)),
+                msg: msg.into(),
+            }),
+        }
+    }
+}
+
+impl<T> ToLsResult<T> for Option<T> {
+    fn invalid_argument<S: Into<String>>(self, msg: S) -> Result<T> {
+        match self {
+            Some(val) => Ok(val),
+            None => Err(Error {
+                code: Code::InvalidArgument,
+                inner: None,
+                msg: msg.into(),
+            }),
+        }
+    }
+
+    fn io_error<S: Into<String>>(self, msg: S) -> Result<T> {
+        match self {
+            Some(val) => Ok(val),
+            None => Err(Error {
+                code: Code::Io,
+                inner: None,
+                msg: msg.into(),
+            }),
+        }
+    }
+
+    fn internal<S: Into<String>>(self, msg: S) -> Result<T> {
+        match self {
+            Some(val) => Ok(val),
+            None => Err(Error {
+                code: Code::Internal,
+                inner: None,
+                msg: msg.into(),
+            }),
         }
     }
 }

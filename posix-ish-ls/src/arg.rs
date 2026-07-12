@@ -1,6 +1,10 @@
-use crate::{BIN_NAME, error::{Error, Result, ToLrsResult}};
+use crate::error::{Error, Result, ToLsResult};
 use std::{
-    env::ArgsOs, fmt, io::{IsTerminal, stdout}
+    env::{ArgsOs, current_dir},
+    ffi::OsString,
+    fmt,
+    io::{IsTerminal, stdout},
+    path::PathBuf,
 };
 
 /// https://man7.org/linux/man-pages/man1/ls.1.html
@@ -12,10 +16,10 @@ USAGE:
   #BIN_NAME [OPTIONS] [PATH ...]
 
 POSITIONAL ARGUMENTS:
-  <PATH>...   Files to operate on.
+  <PATH>...   Files to operate on. If empty then defaults to current working directory.
 
 BASIC OPTIONS [-afq]:
-  -a          Write  out all directory entries, including those whose names begin with a period ( '.' ).
+  -a          Write out all directory entries, including those whose names begin with a period ( '.' ).
               Entries beginning with a period shall not be written out unless explicitly referenced.
   -f          Force  each  argument  to be interpreted as a directory and list the name found in each slot.
               This option shall turn off -l, -t, -s, and -r, and shall turn on -a; the order is the order in
@@ -49,7 +53,7 @@ DIRECTORY OPTIONS [-d | -R]:
               directories differently than other types of files.
   -R          Recursively list subdirectories encountered.
 
-OUTPUT FORMAT [-nlog | -m | -C | -x | -1]
+OUTPUT FORMAT [-nlog | -m | -C | -x | -1]:
   -l          (ell) Do not follow symbolic links named as operands unless the -H or -L options are specified.
               Write out in long format.
   -o          The same as -l (ell), except that the group shall not be written.
@@ -63,11 +67,10 @@ OUTPUT FORMAT [-nlog | -m | -C | -x | -1]
   -1          (Number one) Force output to be one entry per line.
 "#;
 
-/// TODO.. need to becareful of -R with -L. Need to track infinite recursion
 /// https://www.unix.com/man_page/posix/1posix/ls/
 #[derive(Default)]
 pub struct ProgramBehavior {
-    /// `-a`, `-A`
+    /// `-a`
     pub include_all: IncludeAll,
     /// Long options
     pub output_format: OutputFormat,
@@ -89,12 +92,12 @@ pub struct ProgramBehavior {
     pub append_fslash_to_dir: bool,
     /// `-q`
     pub non_printable_and_tabs_to_qmark: bool,
-    /// `-s`
-    pub include_block_size: bool,
     /// `-r`
     pub reverse_sort: bool,
     /// `-h`, `--human-readable
     pub human_readable_size: bool,
+    /// `-s`
+    pub include_block_size: bool,
     /// `--si`
     pub si_units: bool,
     /// `--help`
@@ -132,7 +135,7 @@ pub enum IncludeAll {
     All,
 }
 
-#[derive(Default)]
+#[derive(Default, Eq, PartialEq)]
 pub enum FollowLinks {
     /// Don't follow links
     #[default]
@@ -143,7 +146,7 @@ pub enum FollowLinks {
     ArgsOnly,
 }
 
-#[derive(Default)]
+#[derive(Default, PartialEq, Eq)]
 pub enum Sort {
     #[default]
     None,
@@ -190,8 +193,11 @@ pub enum Opt {
 const LONG_OPTS: [Opt; 4] = [Opt::LowerN, Opt::LowerL, Opt::LowerO, Opt::LowerG];
 
 pub enum LongOpt {
+    /// `--help`
     Help,
+    /// `--si`
     Si,
+    /// `--human-readable`
     HumanReadableSize,
 }
 
@@ -225,7 +231,7 @@ impl TryFrom<char> for Opt {
             'R' => Ok(Self::UpperR),
             'S' => Ok(Self::UpperS),
             '1' => Ok(Self::Number1),
-            _ => Error::invalid_argument(format!("invalid option '-{opt}'")).into()
+            _ => Error::invalid_argument(format!("invalid option '-{opt}'")).into(),
         }
     }
 }
@@ -280,7 +286,7 @@ impl TryFrom<&str> for LongOpt {
             "--help" => Ok(Self::Help),
             "--si" => Ok(Self::Si),
             "--human-readable" => Ok(Self::HumanReadableSize),
-            _ => Error::invalid_argument(format!("invalid option '{value}'")).into()
+            _ => Error::invalid_argument(format!("invalid option '{value}'")).into(),
         }
     }
 }
@@ -291,19 +297,28 @@ impl TryFrom<&Opt> for OutputFormat {
     fn try_from(opt: &Opt) -> Result<Self> {
         match opt {
             Opt::LowerL => Ok(OutputFormat::Long(Long::default())),
-            Opt::LowerG => Ok(OutputFormat::Long(Long { exclude_owner: true, ..Default::default() })),
-            Opt::LowerN => Ok(OutputFormat::Long(Long { owner_group_id: true, ..Default::default() })),
-            Opt::LowerO => Ok(OutputFormat::Long(Long { exclude_group: true, ..Default::default() })),
+            Opt::LowerG => Ok(OutputFormat::Long(Long {
+                exclude_owner: true,
+                ..Default::default()
+            })),
+            Opt::LowerN => Ok(OutputFormat::Long(Long {
+                owner_group_id: true,
+                ..Default::default()
+            })),
+            Opt::LowerO => Ok(OutputFormat::Long(Long {
+                exclude_group: true,
+                ..Default::default()
+            })),
             Opt::LowerM => Ok(OutputFormat::CommaSeparated),
             Opt::LowerX => Ok(OutputFormat::MultiColumnHorizontalSort),
             Opt::UpperC => Ok(OutputFormat::MultiColumn),
             Opt::Number1 => Ok(OutputFormat::OneEntryPerLine),
-            _ => Err(Error::Unreachable),
+            _ => unreachable!("encountered an unknown short option"),
         }
     }
 }
 
-pub fn parse(args: ArgsOs) -> Result<(Vec<String>, ProgramBehavior)> {
+pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
     let mut operands = Vec::new();
     let mut behavior = ProgramBehavior::default();
     let stdout_is_tty = stdout().is_terminal();
@@ -312,9 +327,6 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<String>, ProgramBehavior)> {
     if stdout_is_tty {
         behavior.non_printable_and_tabs_to_qmark = true;
     }
-
-    // Skip program name
-    let mut args_iter = args.into_iter().skip(1);
 
     let mut done_parsing_options = false;
 
@@ -326,18 +338,22 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<String>, ProgramBehavior)> {
     let mut sort_pkey = None;
     let mut output_format = None;
 
-    while let Some(arg) = args_iter.next() {
-        let arg_string = arg.into_string()
-            .invalid_argument("arguments must strictly be UTF-8")?;
-
-        let is_opt = arg_string.starts_with("-");
-        let is_long_opt = arg_string.starts_with("--");
+    // Skip program name
+    for arg in args.into_iter().skip(1) {
+        let arg_utf8_lossy = arg.to_string_lossy();
+        let is_opt = arg_utf8_lossy.starts_with("-");
+        let is_long_opt = arg_utf8_lossy.starts_with("--");
 
         if (!is_opt && !is_long_opt) || done_parsing_options {
             done_parsing_options = true;
-            operands.push(arg_string);
+            operands.push(arg);
             continue;
         }
+
+        let arg_string = arg
+            .into_string()
+            .ok()
+            .invalid_argument("options must strictly be UTF-8")?;
 
         if is_long_opt {
             let long_opt = LongOpt::try_from(arg_string.as_str())?;
@@ -345,7 +361,7 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<String>, ProgramBehavior)> {
             match long_opt {
                 LongOpt::Help => {
                     behavior.show_help = true;
-                    return Ok((Vec::new(), behavior))
+                    return Ok((Vec::new(), behavior));
                 }
                 LongOpt::Si => {
                     behavior.si_units = true;
@@ -376,7 +392,7 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<String>, ProgramBehavior)> {
                         if let OutputFormat::Long(_) = behavior.output_format {
                             behavior.output_format = OutputFormat::default();
                         }
-                    },
+                    }
                     Opt::LowerQ => {
                         behavior.non_printable_and_tabs_to_qmark = true;
                     }
@@ -384,7 +400,6 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<String>, ProgramBehavior)> {
                         behavior.human_readable_size = true;
                     }
                     // BASIC OPTIONS (END)
-
 
                     // ADDITIONAL OUTPUT INFO OPTIONS (BEGIN)
                     Opt::UpperF => {
@@ -413,7 +428,9 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<String>, ProgramBehavior)> {
                         if disable_sort {
                             continue;
                         }
-                        if let Some(pkey) = sort_pkey && pkey != option {
+                        if let Some(pkey) = sort_pkey
+                            && pkey != option
+                        {
                             let msg = format!("`{option}` cannot but used with `{pkey}`");
                             return Error::invalid_argument(msg).into();
                         } else {
@@ -457,9 +474,7 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<String>, ProgramBehavior)> {
                             behavior.treat_dir_operands_as_regular_files = true;
                         }
                     }
-                    Opt::UpperR => {
-                        behavior.recursive_dir_walk = true
-                    }
+                    Opt::UpperR => behavior.recursive_dir_walk = true,
                     // GROUP: Directory (END)
 
                     // GROUP: Output Format (BEGIN)
@@ -467,7 +482,9 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<String>, ProgramBehavior)> {
                         if disable_long {
                             continue;
                         }
-                        if let Some(format) = output_format.as_ref() && !LONG_OPTS.contains(&format) {
+                        if let Some(format) = output_format.as_ref()
+                            && !LONG_OPTS.contains(format)
+                        {
                             let msg = format!("`{option}` cannot be used with `{format}`");
                             return Error::invalid_argument(msg).into();
                         } else if let OutputFormat::Long(long) = &mut behavior.output_format {
@@ -477,16 +494,27 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<String>, ProgramBehavior)> {
                         } else {
                             behavior.output_format = match option {
                                 Opt::LowerL => OutputFormat::Long(Long::default()),
-                                Opt::LowerG => OutputFormat::Long(Long { exclude_owner: true, ..Default::default() }),
-                                Opt::LowerN => OutputFormat::Long(Long { owner_group_id: true, ..Default::default() }),
-                                Opt::LowerO => OutputFormat::Long(Long { exclude_group: true, ..Default::default() }),
+                                Opt::LowerG => OutputFormat::Long(Long {
+                                    exclude_owner: true,
+                                    ..Default::default()
+                                }),
+                                Opt::LowerN => OutputFormat::Long(Long {
+                                    owner_group_id: true,
+                                    ..Default::default()
+                                }),
+                                Opt::LowerO => OutputFormat::Long(Long {
+                                    exclude_group: true,
+                                    ..Default::default()
+                                }),
                                 _ => unreachable!(),
                             };
                             output_format = Some(option);
                         }
                     }
                     Opt::LowerM | Opt::LowerX | Opt::UpperC | Opt::Number1 => {
-                        if let Some(format) = output_format && format != option {
+                        if let Some(format) = output_format
+                            && format != option
+                        {
                             let msg = format!("`{option}` cannot be used with `{format}`");
                             return Error::invalid_argument(msg).into();
                         } else {
@@ -499,11 +527,17 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<String>, ProgramBehavior)> {
                             };
                             output_format = Some(option);
                         }
-                    }
-                    // GROUP: Output Format (END)
+                    } // GROUP: Output Format (END)
                 }
             }
         }
+    }
+
+    if operands.is_empty() {
+        let cwd = current_dir()
+            .map(PathBuf::into_os_string)
+            .io_error("failed to get current working directory")?;
+        operands.push(cwd);
     }
 
     Ok((operands, behavior))
@@ -511,6 +545,6 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<String>, ProgramBehavior)> {
 
 pub fn help_text(binary_name: &str, version: &str) -> String {
     HELP.trim_start()
-        .replace("#BIN_NAME", BIN_NAME)
+        .replace("#BIN_NAME", binary_name)
         .replace("#VERSION", version)
 }
