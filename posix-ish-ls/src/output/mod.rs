@@ -56,7 +56,7 @@ pub fn print(mut entries: Vec<FileInfo>, pb: &ProgramBehavior) -> Result<()> {
         OutputFormat::Long(opts) => long(&entries, opts, &colorizer)?,
         OutputFormat::TableRowMajor => tabular(&entries, &pb, &colorizer, false)?,
         OutputFormat::TableColumnMajor => tabular(&entries, &pb, &colorizer, true)?,
-        OutputFormat::OneEntryPerLine => one_entry_per_line(&entries, &colorizer)?,
+        OutputFormat::OneEntryPerLine => one_entry_per_line(&entries, &pb, &colorizer)?,
     };
 
     println!("{out}");
@@ -91,19 +91,19 @@ fn comma_separated(
     Ok(out)
 }
 
-/// `row_major` set to `true` corresponds with `-x` otherwise `-C`. 
+/// `row_major` set to `true` corresponds with `-x` otherwise `-C`.
 fn tabular(
     entries: &[FileInfo],
     pb: &ProgramBehavior,
     colorizer: &Box<dyn Colorizer>,
     row_major: bool,
 ) -> Result<String> {
-    let formatter = Formatter::new_column_layout(pb, colorizer, &entries);
+    let formatter = Formatter::new_tabular_layout(pb, colorizer, &entries);
     let win_width = tty::get_winsize().map(|win| usize::from(win.ws_col))?;
     let max_col_width = formatter.max_entry_physical_width;
 
     if max_col_width >= win_width {
-        return one_entry_per_line(entries, colorizer);
+        return one_entry_per_line(entries, pb, colorizer);
     }
 
     let num_col = win_width / max_col_width;
@@ -146,11 +146,18 @@ fn tabular(
 }
 
 /// `-1`
-fn one_entry_per_line(entries: &[FileInfo], colorizer: &Box<dyn Colorizer>) -> Result<String> {
+fn one_entry_per_line(
+    entries: &[FileInfo],
+    pb: &ProgramBehavior,
+    colorizer: &Box<dyn Colorizer>,
+) -> Result<String> {
+    let formatter = Formatter::new_tabular_layout(pb, colorizer, &entries);
     let mut out = String::new();
-    for (i, entry) in entries.iter().enumerate() {
-        let (formatted, _) = colorizer.name(entry);
-        out.push_str(&format!("{formatted}"));
+    for i in 0..entries.len() {
+        let Some(formatted) = formatter.get_formatted(i) else {
+            break;
+        };
+        out.push_str(&formatted.trim_end());
 
         if i < entries.len() - 1 {
             out.push('\n');

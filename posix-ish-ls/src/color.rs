@@ -45,6 +45,7 @@ pub fn init_colorizer() -> Result<Box<dyn Colorizer>> {
     Ok(Box::new(color))
 }
 
+#[derive(Default)]
 struct LsColor {
     /// Directory
     di: String,
@@ -85,8 +86,12 @@ impl Colorizer for LsColor {
 
         macro_rules! color {
             ($ft:expr, $name:expr) => {{
-                let num_ansi_chars = BASE_NUM_ANSI_CHARS + $ft.len();
-                (format!("\x1b[{}m{}\x1b[0m", $ft, $name), num_ansi_chars)
+                if $ft.is_empty() {
+                    (format!("{}", $name), 0)
+                } else {
+                    let num_ansi_chars = BASE_NUM_ANSI_CHARS + $ft.len();
+                    (format!("\x1b[{}m{}\x1b[0m", $ft, $name), num_ansi_chars)
+                }
             }};
         }
 
@@ -104,23 +109,6 @@ impl Colorizer for LsColor {
             FileType::CharDev => color!(self.cd, file_name),
             FileType::BlockDev => color!(self.bd, file_name),
             FileType::Unknown => color!(self.ex, file_name),
-        }
-    }
-}
-
-impl Default for LsColor {
-    fn default() -> Self {
-        Self {
-            di: String::from("0"),
-            fi: String::from("0"),
-            ln: String::from("0"),
-            pi: String::from("0"),
-            so: String::from("0"),
-            bd: String::from("0"),
-            cd: String::from("0"),
-            or: String::from("0"),
-            mi: String::from("0"),
-            ex: String::from("0"),
         }
     }
 }
