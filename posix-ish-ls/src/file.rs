@@ -7,9 +7,6 @@ use std::{
     path::PathBuf,
 };
 
-/// 512B
-const BLKSIZE: u64 = 512;
-
 #[derive(Default)]
 pub struct FileInfo {
     pub name: String,

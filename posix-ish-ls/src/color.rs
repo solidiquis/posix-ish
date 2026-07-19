@@ -1,19 +1,21 @@
 use crate::file::{FileInfo, FileType};
-use posix_ish_utils::error::{Result, ToLsResult};
+use posix_ish_utils::{
+    error::{Result, ToLsResult},
+    tty,
+};
 use std::env;
 
 /// https://gist.github.com/thomd/7667642
 pub trait Colorizer {
     /// Returns the stylized string and how many characters were added in total for the
-    /// ANSI-escapes.
-    fn apply(&self, file: &FileInfo) -> (String, usize);
+    /// ANSI-escapes for the file name.
+    fn name(&self, file: &FileInfo) -> (String, usize);
 }
 
 pub fn init_colorizer() -> Result<Box<dyn Colorizer>> {
-    if env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) {
+    if !tty::enable_color() {
         return Ok(Box::new(NoColor));
     }
-
     let Some(ls_colors) = env::var_os("LS_COLORS") else {
         return Ok(Box::new(NoColor));
     };
@@ -70,13 +72,13 @@ struct LsColor {
 struct NoColor;
 
 impl Colorizer for NoColor {
-    fn apply(&self, file: &FileInfo) -> (String, usize) {
+    fn name(&self, file: &FileInfo) -> (String, usize) {
         (file.name.clone(), 0)
     }
 }
 
 impl Colorizer for LsColor {
-    fn apply(&self, file: &FileInfo) -> (String, usize) {
+    fn name(&self, file: &FileInfo) -> (String, usize) {
         const BASE_NUM_ANSI_CHARS: usize = 7;
 
         let file_name = &file.name;

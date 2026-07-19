@@ -1,4 +1,7 @@
-use posix_ish_utils::error::{Error, Result, ToLsResult};
+use posix_ish_utils::{
+    error::{Error, Result, ToLsResult},
+    size,
+};
 use std::{
     env::{ArgsOs, current_dir},
     ffi::OsString,
@@ -102,15 +105,18 @@ pub struct ProgramBehavior {
     pub si_units: bool,
     /// `--help`
     pub show_help: bool,
+
+    /// Block size to use
+    pub blksize: u64,
 }
 
 #[derive(Default)]
 pub enum OutputFormat {
     /// `-C`
     #[default]
-    MultiColumn,
+    TableColumnMajor,
     /// `-x`
-    MultiColumnHorizontalSort,
+    TableRowMajor,
     /// `-m`
     CommaSeparated,
     /// `-1`
@@ -315,8 +321,8 @@ impl TryFrom<&Opt> for OutputFormat {
                 ..Default::default()
             })),
             Opt::LowerM => Ok(OutputFormat::CommaSeparated),
-            Opt::LowerX => Ok(OutputFormat::MultiColumnHorizontalSort),
-            Opt::UpperC => Ok(OutputFormat::MultiColumn),
+            Opt::LowerX => Ok(OutputFormat::TableRowMajor),
+            Opt::UpperC => Ok(OutputFormat::TableColumnMajor),
             Opt::Number1 => Ok(OutputFormat::OneEntryPerLine),
             _ => unreachable!("encountered an unknown short option"),
         }
@@ -326,6 +332,8 @@ impl TryFrom<&Opt> for OutputFormat {
 pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
     let mut operands = Vec::new();
     let mut behavior = ProgramBehavior::default();
+    behavior.blksize = size::block_size();
+
     let stdout_is_tty = stdout().is_terminal();
 
     // tty specific defaults
@@ -525,8 +533,8 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
                         } else {
                             behavior.output_format = match option {
                                 Opt::LowerM => OutputFormat::CommaSeparated,
-                                Opt::LowerX => OutputFormat::MultiColumnHorizontalSort,
-                                Opt::UpperC => OutputFormat::MultiColumn,
+                                Opt::LowerX => OutputFormat::TableRowMajor,
+                                Opt::UpperC => OutputFormat::TableColumnMajor,
                                 Opt::Number1 => OutputFormat::OneEntryPerLine,
                                 _ => unreachable!(),
                             };

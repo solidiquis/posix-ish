@@ -1,4 +1,8 @@
 use crate::error::{Error, Result};
+use std::{
+    env,
+    io::{IsTerminal, stdout},
+};
 
 /// https://man7.org/linux/man-pages/man2/TIOCSWINSZ.2const.html
 pub fn get_winsize() -> Result<libc::winsize> {
@@ -10,4 +14,19 @@ pub fn get_winsize() -> Result<libc::winsize> {
         return Err(Error::io_error("failed to get TTY window size"));
     }
     Ok(winsize)
+}
+
+/// https://web.archive.org/web/20260616201813/https://no-color.org/
+///
+/// ```
+/// Command-line software which adds ANSI color to its output by default
+/// should check for a NO_COLOR environment variable that, when present
+/// and not an empty string (regardless of its value), prevents the addition
+/// of ANSI color.
+/// ```
+pub fn enable_color() -> bool {
+    if !stdout().is_terminal() {
+        return false;
+    }
+    !env::var("NO_COLOR").is_ok_and(|v| !v.is_empty())
 }
