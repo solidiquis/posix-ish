@@ -6,9 +6,7 @@ pub const POSIX_BLKSIZE: u64 = 512;
 /// https://man7.org/linux/man-pages/man1/du.1.html
 /// https://en.wikipedia.org/wiki/POSIX
 pub fn block_size() -> u64 {
-    if env::var_os("POSIXLY_CORRECT").is_some() {
-        return POSIX_BLKSIZE;
-    } else if env::var_os("POSIX_ME_HARDER").is_some() {
+    if env::var_os("POSIXLY_CORRECT").is_some() || env::var_os("POSIX_ME_HARDER").is_some() {
         return POSIX_BLKSIZE;
     }
     env::var("DU_BLOCK_SIZE")

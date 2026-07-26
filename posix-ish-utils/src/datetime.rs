@@ -9,7 +9,7 @@ pub fn to_local_dt(unix_secs: i64) -> Result<libc::tm> {
     let result_p = ptr::addr_of_mut!(result);
 
     unsafe {
-        if libc::localtime_r(time_p, result_p) == ptr::null_mut() {
+        if libc::localtime_r(time_p, result_p).is_null() {
             return Err(Error::io_error("failed to convert system time to local"));
         }
     }
@@ -25,7 +25,7 @@ pub fn to_utc_dt(unix_secs: i64) -> Result<libc::tm> {
     let result_p = ptr::addr_of_mut!(result);
 
     unsafe {
-        if libc::gmtime_r(time_p, result_p) == ptr::null_mut() {
+        if libc::gmtime_r(time_p, result_p).is_null() {
             return Err(Error::io_error("failed to convert system time to UTC"));
         }
     }

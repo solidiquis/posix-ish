@@ -55,11 +55,11 @@ pub fn print(mut entries: Vec<FileInfo>, pb: &ProgramBehavior) -> Result<()> {
     }
 
     let out = match &pb.output_format {
-        OutputFormat::CommaSeparated => comma_separated(&entries, &pb, &colorizer)?,
-        OutputFormat::Long(opts) => long(&pb, &entries, opts, &colorizer)?,
-        OutputFormat::TableRowMajor => tabular(&entries, &pb, &colorizer, false)?,
-        OutputFormat::TableColumnMajor => tabular(&entries, &pb, &colorizer, true)?,
-        OutputFormat::OneEntryPerLine => one_entry_per_line(&entries, &pb, &colorizer)?,
+        OutputFormat::CommaSeparated => comma_separated(&entries, pb, colorizer.as_ref())?,
+        OutputFormat::Long(opts) => long(pb, &entries, opts, colorizer.as_ref())?,
+        OutputFormat::TableRowMajor => tabular(&entries, pb, colorizer.as_ref(), false)?,
+        OutputFormat::TableColumnMajor => tabular(&entries, pb, colorizer.as_ref(), true)?,
+        OutputFormat::OneEntryPerLine => one_entry_per_line(&entries, pb, colorizer.as_ref())?,
     };
 
     println!("{out}");
@@ -72,15 +72,15 @@ fn long(
     pb: &ProgramBehavior,
     entries: &[FileInfo],
     opt: &Long,
-    colorizer: &Box<dyn Colorizer>,
+    colorizer: &dyn Colorizer,
 ) -> Result<String> {
-    let formatter = Formatter::new_long_layout(pb, colorizer, &entries, opt.clone());
+    let formatter = Formatter::new_long_layout(pb, colorizer, entries, *opt);
     let mut out = String::new();
     for i in 0..entries.len() {
         let Some(formatted) = formatter.get_formatted(i) else {
             break;
         };
-        out.push_str(&formatted.trim_end());
+        out.push_str(&formatted.to_string());
 
         if i < entries.len() - 1 {
             out.push('\n');
@@ -93,16 +93,16 @@ fn long(
 fn comma_separated(
     entries: &[FileInfo],
     pb: &ProgramBehavior,
-    colorizer: &Box<dyn Colorizer>,
+    colorizer: &dyn Colorizer,
 ) -> Result<String> {
-    let formatter = Formatter::new_comma_sep_layout(pb, colorizer, &entries);
+    let formatter = Formatter::new_comma_sep_layout(pb, colorizer, entries);
 
     let mut out = String::new();
     for i in 0..entries.len() {
         let Some(formatted) = formatter.get_formatted(i) else {
             break;
         };
-        out.push_str(&format!("{formatted}"));
+        out.push_str(&formatted.to_string());
 
         if i < entries.len() - 1 {
             out.push_str(", ");
@@ -115,10 +115,10 @@ fn comma_separated(
 fn tabular(
     entries: &[FileInfo],
     pb: &ProgramBehavior,
-    colorizer: &Box<dyn Colorizer>,
+    colorizer: &dyn Colorizer,
     row_major: bool,
 ) -> Result<String> {
-    let formatter = Formatter::new_tabular_layout(pb, colorizer, &entries);
+    let formatter = Formatter::new_tabular_layout(pb, colorizer, entries);
     let win_width = tty::get_winsize().map(|win| usize::from(win.ws_col))?;
     let max_col_width = formatter.max_entry_physical_width;
 
@@ -169,15 +169,15 @@ fn tabular(
 fn one_entry_per_line(
     entries: &[FileInfo],
     pb: &ProgramBehavior,
-    colorizer: &Box<dyn Colorizer>,
+    colorizer: &dyn Colorizer,
 ) -> Result<String> {
-    let formatter = Formatter::new_tabular_layout(pb, colorizer, &entries);
+    let formatter = Formatter::new_tabular_layout(pb, colorizer, entries);
     let mut out = String::new();
     for i in 0..entries.len() {
         let Some(formatted) = formatter.get_formatted(i) else {
             break;
         };
-        out.push_str(&formatted.trim_end());
+        out.push_str(formatted.trim_end());
 
         if i < entries.len() - 1 {
             out.push('\n');

@@ -338,8 +338,10 @@ impl TryFrom<&Opt> for OutputFormat {
 
 pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
     let mut operands = Vec::new();
-    let mut behavior = ProgramBehavior::default();
-    behavior.blksize = size::block_size();
+    let mut behavior = ProgramBehavior {
+        blksize: size::block_size(),
+        ..Default::default()
+    };
 
     // tty specific defaults
     if stdout().is_terminal() {

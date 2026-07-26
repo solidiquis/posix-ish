@@ -21,7 +21,7 @@ pub struct Formatter<'a> {
     pub max_len_physical_width: usize,
 
     behavior: &'a ProgramBehavior,
-    colorizer: &'a Box<dyn Colorizer>,
+    colorizer: &'a dyn Colorizer,
     format: Format,
     entries: Vec<Entry>,
 }
@@ -57,7 +57,7 @@ pub struct Entry {
 impl<'a> Formatter<'a> {
     pub fn new_tabular_layout(
         behavior: &'a ProgramBehavior,
-        colorizer: &'a Box<dyn Colorizer>,
+        colorizer: &'a dyn Colorizer,
         entries: &[FileInfo],
     ) -> Self {
         Self::new(behavior, colorizer, entries, Format::Tabular)
@@ -65,7 +65,7 @@ impl<'a> Formatter<'a> {
 
     pub fn new_comma_sep_layout(
         behavior: &'a ProgramBehavior,
-        colorizer: &'a Box<dyn Colorizer>,
+        colorizer: &'a dyn Colorizer,
         entries: &[FileInfo],
     ) -> Self {
         Self::new(behavior, colorizer, entries, Format::CommaSeparated)
@@ -73,7 +73,7 @@ impl<'a> Formatter<'a> {
 
     pub fn new_long_layout(
         behavior: &'a ProgramBehavior,
-        colorizer: &'a Box<dyn Colorizer>,
+        colorizer: &'a dyn Colorizer,
         entries: &[FileInfo],
         opt: Long,
     ) -> Self {
@@ -82,7 +82,7 @@ impl<'a> Formatter<'a> {
 
     fn new(
         behavior: &'a ProgramBehavior,
-        colorizer: &'a Box<dyn Colorizer>,
+        colorizer: &'a dyn Colorizer,
         entries: &[FileInfo],
         format: Format,
     ) -> Self {
