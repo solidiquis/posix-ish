@@ -17,13 +17,6 @@ pub fn get_winsize() -> Result<libc::winsize> {
 }
 
 /// https://web.archive.org/web/20260616201813/https://no-color.org/
-///
-/// ```
-/// Command-line software which adds ANSI color to its output by default
-/// should check for a NO_COLOR environment variable that, when present
-/// and not an empty string (regardless of its value), prevents the addition
-/// of ANSI color.
-/// ```
 pub fn enable_color() -> bool {
     if !stdout().is_terminal() {
         return false;

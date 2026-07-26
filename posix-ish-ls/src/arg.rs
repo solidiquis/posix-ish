@@ -33,7 +33,7 @@ BASIC OPTIONS [-afq]:
               question-mark ('?') character. Enabled by default if stdout is a terminal.
 
 ADDITIONAL OUTPUT INFO OPTIONS [-Fips]:
-  -F          Write a slash ('/') immediately after each  pathname  that  is a directory, an asterisk ('*')
+  -F          Write a slash ('/') immediately after each pathname that is a directory, an asterisk ('*')
               after each that is executable, a vertical bar ('|') after each that is a FIFO, and an at sign ('@')
               after each that is a symbolic link.
   -i          For each file, write the file's file serial number.

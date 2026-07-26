@@ -1,12 +1,12 @@
 use crate::{
     arg::{Long, ProgramBehavior},
     color::Colorizer,
-    file::FileInfo,
+    file::{FileInfo, FileType},
     output::long,
 };
 use posix_ish_utils::{
     fs::{get_group, get_owner},
-    size::{human_bin, human_si},
+    size::{apparent_human_bin, apparent_human_si},
 };
 
 /// inode, size, long
@@ -43,6 +43,7 @@ pub struct Entry {
     name: (String, PhysicalWidth),
     ino: (String, PhysicalWidth),
     size: (String, PhysicalWidth),
+    referent: String,
     owner: String,
     group: String,
     nlinks: String,
@@ -108,11 +109,25 @@ impl<'a> Formatter<'a> {
     pub fn register(&mut self, info: &FileInfo) {
         let mut entry = Entry::default();
 
-        let (name, name_ansi_char_count) = self.colorizer.name(info);
+        let (mut name, name_ansi_char_count) = self.colorizer.name(info);
+
+        if self.behavior.append_fslash_to_dir || self.behavior.include_file_type_symbol {
+            match info.file_type {
+                FileType::Dir => name.push('/'),
+                FileType::Fifo => name.push('|'),
+                FileType::SymLink => name.push('@'),
+                _ if info.is_executable() => name.push('*'),
+                _ => (),
+            }
+        }
         let name_physical_width = name.len() - name_ansi_char_count;
         entry.name = (name, name_physical_width);
         entry.ansi_escape_char_count += name_ansi_char_count;
         self.max_name_physical_width = self.max_name_physical_width.max(name_physical_width);
+
+        if let Some(referent) = info.referent.as_ref() {
+            entry.referent = format!(" -> {}", referent.display());
+        }
 
         if self.behavior.include_file_serial_number {
             let ino = format!("{} ", info.ino);
@@ -122,15 +137,7 @@ impl<'a> Formatter<'a> {
         }
 
         if self.behavior.include_block_size {
-            let size = if self.behavior.human_readable_size {
-                if self.behavior.si_units {
-                    format!("{} ", human_si(info.blocks, self.behavior.blksize))
-                } else {
-                    format!("{} ", human_bin(info.blocks, self.behavior.blksize))
-                }
-            } else {
-                format!("{} ", info.blocks)
-            };
+            let size = format!("{} ", info.blocks);
             let size_physical_width = size.len();
             entry.size = (size, size_physical_width);
             self.max_size_physical_width = self.max_size_physical_width.max(size_physical_width);
@@ -172,9 +179,15 @@ impl<'a> Formatter<'a> {
                     self.max_group_physical_width = self.max_group_physical_width.max(g_len);
                 }
 
-                let len = format!("{}", info.len);
+                let len = if !self.behavior.human_readable_size {
+                    format!("{}", info.len)
+                } else if self.behavior.si_units {
+                    format!("{}", apparent_human_si(info.len).display(true))
+                } else {
+                    format!("{}", apparent_human_bin(info.len).display(true))
+                };
                 let len_len = len.len();
-                entry.len = format!("{}", info.len);
+                entry.len = len;
                 self.max_len_physical_width = self.max_len_physical_width.max(len_len);
 
                 // mtime column is fixed width in terminal
@@ -199,6 +212,7 @@ impl<'a> Formatter<'a> {
             group,
             mtime,
             len,
+            referent,
             name: (name, _),
             ino: (ino, ino_physical_width),
             size: (size, size_physical_width),
@@ -229,7 +243,7 @@ impl<'a> Formatter<'a> {
             Format::Long(opt) => {
                 if opt.exclude_owner {
                     format!(
-                        "{ino:<iw$}{size:<sw$}{mode} {nlinks:<lw$} {group:<gw$} {len:<lenw$} {mtime} {name}",
+                        "{ino:>iw$}{size:>sw$}{mode} {nlinks:>lw$} {group:>gw$} {len:>lenw$} {mtime} {name}{referent}",
                         iw = self.max_ino_physical_width,
                         sw = self.max_size_physical_width,
                         lw = self.max_nlink_physical_width,
@@ -238,7 +252,7 @@ impl<'a> Formatter<'a> {
                     )
                 } else if opt.exclude_group {
                     format!(
-                        "{ino:<iw$}{size:<sw$}{mode} {nlinks:<lw$} {owner:<ow$} {len:<lenw$} {mtime} {name}",
+                        "{ino:>iw$}{size:>sw$}{mode} {nlinks:>lw$} {owner:>ow$} {len:>lenw$} {mtime} {name}{referent}",
                         iw = self.max_ino_physical_width,
                         sw = self.max_size_physical_width,
                         lw = self.max_nlink_physical_width,
@@ -247,7 +261,7 @@ impl<'a> Formatter<'a> {
                     )
                 } else {
                     format!(
-                        "{ino:<iw$}{size:<sw$}{mode} {nlinks:<lw$} {owner:<ow$} {group:<gw$} {len:<lenw$} {mtime} {name}",
+                        "{ino:>iw$}{size:>sw$}{mode} {nlinks:>lw$} {owner:>ow$} {group:>gw$} {len:>lenw$} {mtime} {name}{referent}",
                         iw = self.max_ino_physical_width,
                         sw = self.max_size_physical_width,
                         lw = self.max_nlink_physical_width,
