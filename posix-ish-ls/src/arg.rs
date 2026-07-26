@@ -14,6 +14,11 @@ use std::{
 const HELP: &str = r#"
 #BIN_NAME #VERSION
 
+https://pubs.opengroup.org/onlinepubs/009695099/utilities/ls.html
+
+A best effort POSIX-ish implementation of the ls command. Any option that is followed
+by the (np) annotation means that it is not an option defined by POSIX.
+
 USAGE:
   #BIN_NAME [OPTIONS] [PATH ...]
 
@@ -55,9 +60,9 @@ DIRECTORY OPTIONS [-d | -R]:
               directories differently than other types of files.
   -R          Recursively list subdirectories encountered.
 
-OUTPUT FORMAT [-nlog | -m | -C | -x | -1]:
+OUTPUT FORMAT [-nlogh | -m | -C | -x | -1] [--human-readable] [--si]:
   -l          (ell) Do not follow symbolic links named as operands unless the -H or -L options are specified.
-              Write out in long format.
+              Write out in long format: <mode> <nlink> <owner> <group> <apparent-size> <mtime> <name>
   -o          The same as -l (ell), except that the group shall not be written.
   -g          The same as -l (ell), except that the owner shall not be written.
   -n          The same as -l (ell), except that the owner's UID and GID numbers shall be written, rather than
@@ -67,6 +72,12 @@ OUTPUT FORMAT [-nlog | -m | -C | -x | -1]:
   -x          The same as -C, except that the multi-text-column output is produced with entries sorted across,
               rather than down, the columns.
   -1          (Number one) Force output to be one entry per line. This is the default if stdout is not a terminal.
+  -h, --human-readable (np)
+              Prints the apparent size of files in binary units.
+  --si (np)   When used with -h, --human-readable SI units are used instead of binary units.
+
+OTHER:
+  --help (np) Show help text and exit the program.
 "#;
 
 /// https://www.unix.com/man_page/posix/1posix/ls/

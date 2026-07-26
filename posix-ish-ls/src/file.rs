@@ -120,6 +120,8 @@ impl FileInfo {
         self.mode & 0o111 > 0
     }
 
+    /// Replace non-printable characters with '?' if `replace_non_printables` is `true`. Non-unicode
+    /// sequences will always be replaced with the unicode decode error replacement character.
     fn sanitize_file_name(name: &OsStr, replace_non_printables: bool) -> String {
         if replace_non_printables {
             name.to_string_lossy()

@@ -236,9 +236,7 @@ impl<'a> Formatter<'a> {
                     nw = self.max_name_physical_width + ansi_escape_char_count,
                 )
             }
-
-            // <file mode>, <number of links> <owner name>, <group name>,
-            // <number of bytes in the file> <date and time>, <pathname>
+            // <mode> <nlink> <owner> <group> <apparent size> <mtime> <name>
             Format::Long(opt) => {
                 if opt.exclude_owner {
                     format!(
