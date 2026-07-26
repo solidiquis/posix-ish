@@ -9,7 +9,6 @@ use posix_ish_utils::{
     size::{apparent_human_bin, apparent_human_si},
 };
 
-/// inode, size, long
 pub struct Formatter<'a> {
     pub max_entry_physical_width: usize,
     pub max_name_physical_width: usize,
@@ -20,7 +19,7 @@ pub struct Formatter<'a> {
     pub max_group_physical_width: usize,
     pub max_len_physical_width: usize,
 
-    behavior: &'a ProgramBehavior,
+    pb: &'a ProgramBehavior,
     colorizer: &'a dyn Colorizer,
     format: Format,
     entries: Vec<Entry>,
@@ -57,38 +56,38 @@ pub struct Entry {
 
 impl<'a> Formatter<'a> {
     pub fn new_tabular_layout(
-        behavior: &'a ProgramBehavior,
+        pb: &'a ProgramBehavior,
         colorizer: &'a dyn Colorizer,
         entries: &[FileInfo],
     ) -> Self {
-        Self::new(behavior, colorizer, entries, Format::Tabular)
+        Self::new(pb, colorizer, entries, Format::Tabular)
     }
 
     pub fn new_comma_sep_layout(
-        behavior: &'a ProgramBehavior,
+        pb: &'a ProgramBehavior,
         colorizer: &'a dyn Colorizer,
         entries: &[FileInfo],
     ) -> Self {
-        Self::new(behavior, colorizer, entries, Format::CommaSeparated)
+        Self::new(pb, colorizer, entries, Format::CommaSeparated)
     }
 
     pub fn new_long_layout(
-        behavior: &'a ProgramBehavior,
+        pb: &'a ProgramBehavior,
         colorizer: &'a dyn Colorizer,
         entries: &[FileInfo],
         opt: Long,
     ) -> Self {
-        Self::new(behavior, colorizer, entries, Format::Long(opt))
+        Self::new(pb, colorizer, entries, Format::Long(opt))
     }
 
     fn new(
-        behavior: &'a ProgramBehavior,
+        pb: &'a ProgramBehavior,
         colorizer: &'a dyn Colorizer,
         entries: &[FileInfo],
         format: Format,
     ) -> Self {
         let mut formatter = Self {
-            behavior,
+            pb,
             colorizer,
             entries: Vec::with_capacity(entries.len()),
             format,
@@ -111,7 +110,7 @@ impl<'a> Formatter<'a> {
 
         let (mut name, name_ansi_char_count) = self.colorizer.name(info);
 
-        if self.behavior.append_fslash_to_dir || self.behavior.include_file_type_symbol {
+        if self.pb.append_fslash_to_dir || self.pb.include_file_type_symbol {
             match info.file_type {
                 FileType::Dir => name.push('/'),
                 FileType::Fifo => name.push('|'),
@@ -129,14 +128,14 @@ impl<'a> Formatter<'a> {
             entry.referent = format!(" -> {}", referent.display());
         }
 
-        if self.behavior.include_file_serial_number {
+        if self.pb.include_file_serial_number {
             let ino = format!("{} ", info.ino);
             let ino_physical_width = ino.len();
             entry.ino = (ino, ino_physical_width);
             self.max_ino_physical_width = self.max_ino_physical_width.max(ino_physical_width);
         }
 
-        if self.behavior.include_block_size {
+        if self.pb.include_block_size {
             let size = format!("{} ", info.blocks);
             let size_physical_width = size.len();
             entry.size = (size, size_physical_width);
@@ -179,9 +178,9 @@ impl<'a> Formatter<'a> {
                     self.max_group_physical_width = self.max_group_physical_width.max(g_len);
                 }
 
-                let len = if !self.behavior.human_readable_size {
+                let len = if !self.pb.human_readable_size {
                     format!("{}", info.len)
-                } else if self.behavior.si_units {
+                } else if self.pb.si_units {
                     format!("{}", apparent_human_si(info.len).display(true))
                 } else {
                     format!("{}", apparent_human_bin(info.len).display(true))
@@ -191,7 +190,7 @@ impl<'a> Formatter<'a> {
                 self.max_len_physical_width = self.max_len_physical_width.max(len_len);
 
                 // mtime column is fixed width in terminal
-                entry.mtime = long::mtime(info.mtime, self.behavior.program_start);
+                entry.mtime = long::mtime(info.mtime, self.pb.program_start);
             }
             Format::Tabular => {
                 // Pad for tailing white space

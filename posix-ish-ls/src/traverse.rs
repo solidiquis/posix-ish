@@ -25,7 +25,7 @@ pub fn traverse(root: &OsStr, pb: &ProgramBehavior) -> Result<Vec<FileInfo>> {
     .io_error("failed to query operand metadata")?;
 
     let root_info = {
-        let mut root = FileInfo::try_from((root, &root_md))?;
+        let mut root = FileInfo::try_from((root, &root_md, pb))?;
         root.name = ".".to_string();
         root.hidden = true;
         root

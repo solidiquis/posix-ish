@@ -40,8 +40,8 @@ pub enum FileType {
 }
 
 impl FileInfo {
-    pub fn try_new(entry: DirEntry, behavior: &ProgramBehavior) -> Result<Self> {
-        let name = entry.file_name().to_string_lossy().to_string();
+    pub fn try_new(entry: DirEntry, pb: &ProgramBehavior) -> Result<Self> {
+        let name = Self::sanitize_file_name(&entry.file_name(), pb.non_printable_and_tabs_to_qmark);
         let path = entry.path();
         let file_type = entry.file_type().map_or(FileType::Unknown, FileType::from);
         let hidden = name.starts_with('.');
@@ -56,7 +56,7 @@ impl FileInfo {
             None
         };
 
-        if !Self::need_metadata(behavior) {
+        if !Self::need_metadata(pb) {
             return Ok(Self {
                 name,
                 path,
@@ -66,7 +66,7 @@ impl FileInfo {
                 ..Default::default()
             });
         }
-        let metadata = match behavior.follow_links {
+        let metadata = match pb.follow_links {
             FollowLinks::NoFollow => entry.metadata(),
             _ => {
                 if let Some(target) = &referent {
@@ -108,23 +108,35 @@ impl FileInfo {
         })
     }
 
-    fn need_metadata(behavior: &ProgramBehavior) -> bool {
-        behavior.sort == Sort::Size
-            || behavior.follow_links != FollowLinks::NoFollow
-            || behavior.include_block_size
-            || matches!(behavior.output_format, OutputFormat::Long(_))
+    fn need_metadata(pb: &ProgramBehavior) -> bool {
+        pb.sort == Sort::Size
+            || pb.follow_links != FollowLinks::NoFollow
+            || pb.include_block_size
+            || matches!(pb.output_format, OutputFormat::Long(_))
     }
 
     /// Does user, group, or other have executable permissions over this file.
     pub fn is_executable(&self) -> bool {
         self.mode & 0o111 > 0
     }
+
+    fn sanitize_file_name(name: &OsStr, replace_non_printables: bool) -> String {
+        if replace_non_printables {
+            name.to_string_lossy()
+                .into_owned()
+                .chars()
+                .map(|c| if c.is_control() || c == '\t' { '?' } else { c })
+                .collect()
+        } else {
+            name.to_string_lossy().into_owned()
+        }
+    }
 }
 
-impl TryFrom<(&OsStr, &Metadata)> for FileInfo {
+impl TryFrom<(&OsStr, &Metadata, &ProgramBehavior)> for FileInfo {
     type Error = Error;
 
-    fn try_from((path, md): (&OsStr, &Metadata)) -> Result<Self> {
+    fn try_from((path, md, pb): (&OsStr, &Metadata, &ProgramBehavior)) -> Result<Self> {
         let path = PathBuf::from(path);
         let name = path
             .canonicalize()
@@ -132,7 +144,7 @@ impl TryFrom<(&OsStr, &Metadata)> for FileInfo {
             .file_name()
             .map_or_else(
                 || format!("{}", path.display()),
-                |s| s.to_os_string().to_string_lossy().to_string(),
+                |s| Self::sanitize_file_name(s, pb.non_printable_and_tabs_to_qmark),
             );
         let hidden = name.starts_with('.');
         let file_type = FileType::from(md.file_type());
@@ -195,4 +207,12 @@ impl From<std::fs::FileType> for FileType {
             Self::Unknown
         }
     }
+}
+
+#[test]
+fn test_sanitize_file_name() {
+    let danger = std::ffi::OsString::from("\x1b[31;43mDANGER_FILE\x1b[0m");
+    let sanitized = FileInfo::sanitize_file_name(&danger, true);
+    let expected = "?[31;43mDANGER_FILE?[0m";
+    assert_eq!(expected, sanitized);
 }

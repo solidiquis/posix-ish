@@ -1,7 +1,4 @@
-use posix_ish_utils::{
-    error::{Error, Result, ToPosixishResult},
-    size,
-};
+use posix_ish_utils::error::{Error, Result, ToPosixishResult};
 use std::{
     env::{ArgsOs, current_dir},
     ffi::OsString,
@@ -29,7 +26,7 @@ BASIC OPTIONS [-afq]:
   -f          Force  each  argument  to be interpreted as a directory and list the name found in each slot.
               This option shall turn off -l, -t, -s, and -r, and shall turn on -a; the order is the order in
               which entries appear in the directory.
-  -q          Force  each instance of non-printable filename characters and <tab>s to be written as the
+  -q          Force each instance of non-printable filename characters and <tab>s to be written as the
               question-mark ('?') character. Enabled by default if stdout is a terminal.
 
 ADDITIONAL OUTPUT INFO OPTIONS [-Fips]:
@@ -107,10 +104,6 @@ pub struct ProgramBehavior {
     pub si_units: bool,
     /// `--help`
     pub show_help: bool,
-
-    /// Block size to use
-    pub blksize: u64,
-
     pub program_start: ProgramStart,
 }
 
@@ -338,18 +331,15 @@ impl TryFrom<&Opt> for OutputFormat {
 
 pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
     let mut operands = Vec::new();
-    let mut behavior = ProgramBehavior {
-        blksize: size::block_size(),
-        ..Default::default()
-    };
+    let mut pb = ProgramBehavior::default();
 
     // tty specific defaults
     if stdout().is_terminal() {
-        behavior.non_printable_and_tabs_to_qmark = true;
+        pb.non_printable_and_tabs_to_qmark = true;
     } else {
         // See STDOUT section
         // https://pubs.opengroup.org/onlinepubs/009695099/utilities/ls.html
-        behavior.output_format = OutputFormat::OneEntryPerLine;
+        pb.output_format = OutputFormat::OneEntryPerLine;
     }
 
     let mut done_parsing_options = false;
@@ -384,14 +374,14 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
 
             match long_opt {
                 LongOpt::Help => {
-                    behavior.show_help = true;
-                    return Ok((Vec::new(), behavior));
+                    pb.show_help = true;
+                    return Ok((Vec::new(), pb));
                 }
                 LongOpt::Si => {
-                    behavior.si_units = true;
+                    pb.si_units = true;
                 }
                 LongOpt::HumanReadableSize => {
-                    behavior.human_readable_size = true;
+                    pb.human_readable_size = true;
                 }
             }
         } else if is_opt {
@@ -401,50 +391,50 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
                 match option {
                     // BASIC OPTIONS (BEGIN)
                     Opt::LowerA => {
-                        behavior.include_all = IncludeAll::All;
+                        pb.include_all = IncludeAll::All;
                     }
                     Opt::LowerF => {
-                        behavior.treat_operands_as_dir_no_order = true;
-                        behavior.include_all = IncludeAll::All;
-                        behavior.sort = Sort::None;
-                        behavior.include_block_size = false;
+                        pb.treat_operands_as_dir_no_order = true;
+                        pb.include_all = IncludeAll::All;
+                        pb.sort = Sort::None;
+                        pb.include_block_size = false;
 
                         disable_long = true;
                         disable_size = true;
                         disable_sort = true;
 
-                        if let OutputFormat::Long(_) = behavior.output_format {
-                            behavior.output_format = OutputFormat::default();
+                        if let OutputFormat::Long(_) = pb.output_format {
+                            pb.output_format = OutputFormat::default();
                         }
                     }
                     Opt::LowerQ => {
-                        behavior.non_printable_and_tabs_to_qmark = true;
+                        pb.non_printable_and_tabs_to_qmark = true;
                     }
                     Opt::LowerH => {
-                        behavior.human_readable_size = true;
+                        pb.human_readable_size = true;
                     }
                     // BASIC OPTIONS (END)
 
                     // ADDITIONAL OUTPUT INFO OPTIONS (BEGIN)
                     Opt::UpperF => {
-                        behavior.include_file_type_symbol = true;
+                        pb.include_file_type_symbol = true;
                     }
                     Opt::LowerI => {
-                        behavior.include_file_serial_number = true;
+                        pb.include_file_serial_number = true;
                     }
                     Opt::LowerP => {
-                        behavior.append_fslash_to_dir = true;
+                        pb.append_fslash_to_dir = true;
                     }
                     Opt::LowerS => {
                         if !disable_size {
-                            behavior.include_block_size = true;
+                            pb.include_block_size = true;
                         }
                     }
                     // ADDITIONAL OUTPUT INFO OPTIONS (END)
 
                     // SORTING
                     Opt::LowerR => {
-                        behavior.reverse_sort = true;
+                        pb.reverse_sort = true;
                     }
 
                     // GROUP: Sorting (BEGIN)
@@ -458,7 +448,7 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
                             let msg = format!("`{option}` cannot but used with `{pkey}`");
                             return Error::invalid_argument(msg).into();
                         }
-                        behavior.sort = match option {
+                        pb.sort = match option {
                             Opt::LowerC => Sort::Status,
                             Opt::LowerU => Sort::Access,
                             Opt::LowerT => Sort::Mod,
@@ -472,16 +462,16 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
 
                     // GROUP: Follow links (BEGIN)
                     Opt::UpperH => {
-                        if let FollowLinks::NoFollow = behavior.follow_links {
-                            behavior.follow_links = FollowLinks::ArgsOnly;
+                        if let FollowLinks::NoFollow = pb.follow_links {
+                            pb.follow_links = FollowLinks::ArgsOnly;
                         } else {
                             let msg = format!("`{option}` cannot but used with `{}`", Opt::UpperL);
                             return Error::invalid_argument(msg).into();
                         }
                     }
                     Opt::UpperL => {
-                        if let FollowLinks::NoFollow = behavior.follow_links {
-                            behavior.follow_links = FollowLinks::All;
+                        if let FollowLinks::NoFollow = pb.follow_links {
+                            pb.follow_links = FollowLinks::All;
                         } else {
                             let msg = format!("`{option}` cannot but used with `{}`", Opt::UpperH);
                             return Error::invalid_argument(msg).into();
@@ -491,14 +481,14 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
 
                     // GROUP: Directory (BEGIN)
                     Opt::LowerD => {
-                        if behavior.recursive_dir_walk {
+                        if pb.recursive_dir_walk {
                             let msg = format!("`{option}` cannot be used with `{}`", Opt::UpperR);
                             return Error::invalid_argument(msg).into();
                         } else {
-                            behavior.treat_dir_operands_as_regular_files = true;
+                            pb.treat_dir_operands_as_regular_files = true;
                         }
                     }
-                    Opt::UpperR => behavior.recursive_dir_walk = true,
+                    Opt::UpperR => pb.recursive_dir_walk = true,
                     // GROUP: Directory (END)
 
                     // GROUP: Output Format (BEGIN)
@@ -511,12 +501,12 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
                         {
                             let msg = format!("`{option}` cannot be used with `{format}`");
                             return Error::invalid_argument(msg).into();
-                        } else if let OutputFormat::Long(long) = &mut behavior.output_format {
+                        } else if let OutputFormat::Long(long) = &mut pb.output_format {
                             long.exclude_owner = long.exclude_owner || option == Opt::LowerG;
                             long.exclude_group = long.exclude_group || option == Opt::LowerO;
                             long.owner_group_id = long.owner_group_id || option == Opt::LowerN;
                         } else {
-                            behavior.output_format = match option {
+                            pb.output_format = match option {
                                 Opt::LowerL => OutputFormat::Long(Long::default()),
                                 Opt::LowerG => OutputFormat::Long(Long {
                                     exclude_owner: true,
@@ -542,7 +532,7 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
                             let msg = format!("`{option}` cannot be used with `{format}`");
                             return Error::invalid_argument(msg).into();
                         } else {
-                            behavior.output_format = match option {
+                            pb.output_format = match option {
                                 Opt::LowerM => OutputFormat::CommaSeparated,
                                 Opt::LowerX => OutputFormat::TableRowMajor,
                                 Opt::UpperC => OutputFormat::TableColumnMajor,
@@ -564,7 +554,7 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
         operands.push(cwd);
     }
 
-    Ok((operands, behavior))
+    Ok((operands, pb))
 }
 
 pub fn help_text(binary_name: &str, version: &str) -> String {

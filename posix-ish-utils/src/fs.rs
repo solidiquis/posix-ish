@@ -15,7 +15,7 @@ pub fn get_owner(uid: u32) -> Result<String> {
         }
         let c_str = CStr::from_ptr(passwd.pw_name);
 
-        Ok(c_str.to_string_lossy().to_string())
+        Ok(c_str.to_string_lossy().into_owned())
     }
 }
 pub fn get_group(gid: u32) -> Result<String> {
@@ -33,6 +33,6 @@ pub fn get_group(gid: u32) -> Result<String> {
 
         let c_str = CStr::from_ptr(group.gr_name);
 
-        Ok(c_str.to_string_lossy().to_string())
+        Ok(c_str.to_string_lossy().into_owned())
     }
 }
