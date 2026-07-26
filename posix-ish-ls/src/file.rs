@@ -1,5 +1,5 @@
 use crate::arg::{FollowLinks, OutputFormat, ProgramBehavior, Sort};
-use posix_ish_utils::error::{Error, Result, ToLsResult};
+use posix_ish_utils::error::{Error, Result, ToPosixishResult};
 use std::{
     ffi::OsStr,
     fs::{self, DirEntry, Metadata},
@@ -23,6 +23,7 @@ pub struct FileInfo {
     pub atime: i64,
     pub mtime: i64,
     pub ctime: i64,
+    pub len: u64,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -86,6 +87,7 @@ impl FileInfo {
         let atime = metadata.atime();
         let mtime = metadata.mtime();
         let ctime = metadata.ctime();
+        let len = metadata.len();
 
         Ok(Self {
             name,
@@ -102,6 +104,7 @@ impl FileInfo {
             atime,
             mtime,
             ctime,
+            len,
         })
     }
 
@@ -142,6 +145,7 @@ impl TryFrom<(&OsStr, &Metadata)> for FileInfo {
         let atime = md.atime();
         let mtime = md.mtime();
         let ctime = md.ctime();
+        let len = md.len();
 
         let referent = if matches!(file_type, FileType::SymLink) {
             let target = path.canonicalize().io_error("failed to resolve link")?;
@@ -166,6 +170,7 @@ impl TryFrom<(&OsStr, &Metadata)> for FileInfo {
             atime,
             mtime,
             ctime,
+            len,
         })
     }
 }

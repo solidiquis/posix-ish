@@ -1,5 +1,13 @@
-use crate::{arg::ProgramBehavior, color::Colorizer, file::FileInfo};
-use posix_ish_utils::size::{human_bin, human_si};
+use crate::{
+    arg::{Long, ProgramBehavior},
+    color::Colorizer,
+    file::FileInfo,
+    output::long,
+};
+use posix_ish_utils::{
+    fs::{get_group, get_owner},
+    size::{human_bin, human_si},
+};
 
 /// inode, size, long
 pub struct Formatter<'a> {
@@ -7,6 +15,11 @@ pub struct Formatter<'a> {
     pub max_name_physical_width: usize,
     pub max_ino_physical_width: usize,
     pub max_size_physical_width: usize,
+    pub max_nlink_physical_width: usize,
+    pub max_owner_physical_width: usize,
+    pub max_group_physical_width: usize,
+    pub max_len_physical_width: usize,
+
     behavior: &'a ProgramBehavior,
     colorizer: &'a Box<dyn Colorizer>,
     format: Format,
@@ -16,19 +29,28 @@ pub struct Formatter<'a> {
 enum Format {
     Tabular,
     CommaSeparated,
-    Long,
+    Long(Long),
 }
+
+/// How many physical columns in the TTY it takes to render a sequence of text. It does not take
+/// into account any ANSI escape sequence characters.
+type PhysicalWidth = usize;
 
 /// Widths take do not take into account ANSI escape sequences. The `ansi_escape_char_count` field
 /// is used to indicate how many ANSI escape characters are used.
 #[derive(Default)]
 pub struct Entry {
-    name: String,
-    name_physical_width: usize,
-    ino: String,
-    ino_physical_width: usize,
-    size: String,
-    size_physical_width: usize,
+    name: (String, PhysicalWidth),
+    ino: (String, PhysicalWidth),
+    size: (String, PhysicalWidth),
+    owner: String,
+    group: String,
+    nlinks: String,
+    len: String,
+    // Mode column is fixed width in terminal
+    mode: String,
+    // mtime column is fixed width in terminal
+    mtime: String,
     ansi_escape_char_count: usize,
 }
 
@@ -49,6 +71,15 @@ impl<'a> Formatter<'a> {
         Self::new(behavior, colorizer, entries, Format::CommaSeparated)
     }
 
+    pub fn new_long_layout(
+        behavior: &'a ProgramBehavior,
+        colorizer: &'a Box<dyn Colorizer>,
+        entries: &[FileInfo],
+        opt: Long,
+    ) -> Self {
+        Self::new(behavior, colorizer, entries, Format::Long(opt))
+    }
+
     fn new(
         behavior: &'a ProgramBehavior,
         colorizer: &'a Box<dyn Colorizer>,
@@ -64,6 +95,10 @@ impl<'a> Formatter<'a> {
             max_ino_physical_width: 0,
             max_size_physical_width: 0,
             max_entry_physical_width: 0,
+            max_nlink_physical_width: 0,
+            max_owner_physical_width: 0,
+            max_group_physical_width: 0,
+            max_len_physical_width: 0,
         };
         entries.iter().for_each(|ent| formatter.register(ent));
 
@@ -74,37 +109,77 @@ impl<'a> Formatter<'a> {
         let mut entry = Entry::default();
 
         let (name, name_ansi_char_count) = self.colorizer.name(info);
-        entry.name = name;
+        let name_physical_width = name.len() - name_ansi_char_count;
+        entry.name = (name, name_physical_width);
         entry.ansi_escape_char_count += name_ansi_char_count;
-        entry.name_physical_width = entry.name.len() - name_ansi_char_count;
-        self.max_name_physical_width = self.max_name_physical_width.max(entry.name_physical_width);
+        self.max_name_physical_width = self.max_name_physical_width.max(name_physical_width);
 
         if self.behavior.include_file_serial_number {
             let ino = format!("{} ", info.ino);
-            entry.ino = ino;
-            entry.ino_physical_width = entry.ino.len();
-            self.max_ino_physical_width = self.max_ino_physical_width.max(entry.ino.len());
+            let ino_physical_width = ino.len();
+            entry.ino = (ino, ino_physical_width);
+            self.max_ino_physical_width = self.max_ino_physical_width.max(ino_physical_width);
         }
 
         if self.behavior.include_block_size {
-            if self.behavior.human_readable_size {
+            let size = if self.behavior.human_readable_size {
                 if self.behavior.si_units {
-                    entry.size = format!("{} ", human_si(info.blocks, self.behavior.blksize));
+                    format!("{} ", human_si(info.blocks, self.behavior.blksize))
                 } else {
-                    entry.size = format!("{} ", human_bin(info.blocks, self.behavior.blksize));
+                    format!("{} ", human_bin(info.blocks, self.behavior.blksize))
                 }
             } else {
-                entry.size = format!("{} ", info.blocks);
-            }
-            entry.size_physical_width = entry.size.len();
-            self.max_size_physical_width = self.max_size_physical_width.max(entry.size.len());
+                format!("{} ", info.blocks)
+            };
+            let size_physical_width = size.len();
+            entry.size = (size, size_physical_width);
+            self.max_size_physical_width = self.max_size_physical_width.max(size_physical_width);
         }
 
         let current_max = self.max_ino_physical_width
             + self.max_size_physical_width
             + self.max_name_physical_width;
 
-        match &mut self.format {
+        match &self.format {
+            Format::Long(opt) => {
+                // Mode column is fixed width in terminal
+                entry.mode = long::mode(&info.file_type, info.mode);
+
+                let links = format!("{}", info.nlink);
+                let link_len = links.len();
+                entry.nlinks = links;
+                self.max_nlink_physical_width = self.max_nlink_physical_width.max(link_len);
+
+                if opt.owner_group_id {
+                    let o = format!("{}", info.uid);
+                    let o_len = o.len();
+                    entry.owner = o;
+                    self.max_owner_physical_width = self.max_owner_physical_width.max(o_len);
+
+                    let g = format!("{}", info.gid);
+                    let g_len = g.len();
+                    entry.group = g;
+                    self.max_group_physical_width = self.max_group_physical_width.max(g_len);
+                } else {
+                    let o = get_owner(info.uid).unwrap_or_else(|_| String::from("-"));
+                    let o_len = o.len();
+                    entry.owner = o;
+                    self.max_owner_physical_width = self.max_owner_physical_width.max(o_len);
+
+                    let g = get_group(info.gid).unwrap_or_else(|_| String::from("_"));
+                    let g_len = g.len();
+                    entry.group = g;
+                    self.max_group_physical_width = self.max_group_physical_width.max(g_len);
+                }
+
+                let len = format!("{}", info.len);
+                let len_len = len.len();
+                entry.len = format!("{}", info.len);
+                self.max_len_physical_width = self.max_len_physical_width.max(len_len);
+
+                // mtime column is fixed width in terminal
+                entry.mtime = long::mtime(info.mtime, self.behavior.program_start);
+            }
             Format::Tabular => {
                 // Pad for tailing white space
                 self.max_entry_physical_width = self.max_entry_physical_width.max(current_max + 1);
@@ -118,16 +193,20 @@ impl<'a> Formatter<'a> {
 
     pub fn get_formatted(&self, idx: usize) -> Option<String> {
         let Entry {
-            name,
-            name_physical_width,
-            ino,
-            ino_physical_width,
-            size,
-            size_physical_width,
+            mode,
+            nlinks,
+            owner,
+            group,
+            mtime,
+            len,
+            name: (name, _),
+            ino: (ino, ino_physical_width),
+            size: (size, size_physical_width),
             ansi_escape_char_count,
+            ..
         } = &self.entries.get(idx)?;
 
-        let out = match self.format {
+        let out = match &self.format {
             Format::CommaSeparated => {
                 format!(
                     "{ino:<iw$}{size:<sw$}{name}",
@@ -144,7 +223,40 @@ impl<'a> Formatter<'a> {
                     nw = self.max_name_physical_width + ansi_escape_char_count,
                 )
             }
-            Format::Long => todo!(),
+
+            // <file mode>, <number of links> <owner name>, <group name>,
+            // <number of bytes in the file> <date and time>, <pathname>
+            Format::Long(opt) => {
+                if opt.exclude_owner {
+                    format!(
+                        "{ino:<iw$}{size:<sw$}{mode} {nlinks:<lw$} {group:<gw$} {len:<lenw$} {mtime} {name}",
+                        iw = self.max_ino_physical_width,
+                        sw = self.max_size_physical_width,
+                        lw = self.max_nlink_physical_width,
+                        gw = self.max_group_physical_width,
+                        lenw = self.max_len_physical_width,
+                    )
+                } else if opt.exclude_group {
+                    format!(
+                        "{ino:<iw$}{size:<sw$}{mode} {nlinks:<lw$} {owner:<ow$} {len:<lenw$} {mtime} {name}",
+                        iw = self.max_ino_physical_width,
+                        sw = self.max_size_physical_width,
+                        lw = self.max_nlink_physical_width,
+                        ow = self.max_owner_physical_width,
+                        lenw = self.max_len_physical_width,
+                    )
+                } else {
+                    format!(
+                        "{ino:<iw$}{size:<sw$}{mode} {nlinks:<lw$} {owner:<ow$} {group:<gw$} {len:<lenw$} {mtime} {name}",
+                        iw = self.max_ino_physical_width,
+                        sw = self.max_size_physical_width,
+                        lw = self.max_nlink_physical_width,
+                        ow = self.max_owner_physical_width,
+                        gw = self.max_group_physical_width,
+                        lenw = self.max_len_physical_width,
+                    )
+                }
+            }
         };
 
         Some(out)

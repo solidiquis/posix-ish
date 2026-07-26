@@ -1,5 +1,5 @@
 use posix_ish_utils::{
-    error::{Error, Result, ToLsResult},
+    error::{Error, Result, ToPosixishResult},
     size,
 };
 use std::{
@@ -7,7 +7,9 @@ use std::{
     ffi::OsString,
     fmt,
     io::{IsTerminal, stdout},
+    ops::Deref,
     path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 /// https://man7.org/linux/man-pages/man1/ls.1.html
@@ -67,7 +69,7 @@ OUTPUT FORMAT [-nlog | -m | -C | -x | -1]:
   -C          Write multi-text-column output with entries sorted down the columns.
   -x          The same as -C, except that the multi-text-column output is produced with entries sorted across,
               rather than down, the columns.
-  -1          (Number one) Force output to be one entry per line.
+  -1          (Number one) Force output to be one entry per line. This is the default if stdout is not a terminal.
 "#;
 
 /// https://www.unix.com/man_page/posix/1posix/ls/
@@ -108,6 +110,8 @@ pub struct ProgramBehavior {
 
     /// Block size to use
     pub blksize: u64,
+
+    pub program_start: ProgramStart,
 }
 
 #[derive(Default)]
@@ -125,7 +129,10 @@ pub enum OutputFormat {
     Long(Long),
 }
 
-#[derive(Default, PartialEq, Eq)]
+#[derive(Copy, Clone)]
+pub struct ProgramStart(i64);
+
+#[derive(Default, PartialEq, Eq, Copy, Clone)]
 pub struct Long {
     pub exclude_owner: bool,
     pub exclude_group: bool,
@@ -334,11 +341,13 @@ pub fn parse(args: ArgsOs) -> Result<(Vec<OsString>, ProgramBehavior)> {
     let mut behavior = ProgramBehavior::default();
     behavior.blksize = size::block_size();
 
-    let stdout_is_tty = stdout().is_terminal();
-
     // tty specific defaults
-    if stdout_is_tty {
+    if stdout().is_terminal() {
         behavior.non_printable_and_tabs_to_qmark = true;
+    } else {
+        // See STDOUT section
+        // https://pubs.opengroup.org/onlinepubs/009695099/utilities/ls.html
+        behavior.output_format = OutputFormat::OneEntryPerLine;
     }
 
     let mut done_parsing_options = false;
@@ -560,4 +569,25 @@ pub fn help_text(binary_name: &str, version: &str) -> String {
     HELP.trim_start()
         .replace("#BIN_NAME", binary_name)
         .replace("#VERSION", version)
+}
+
+impl Default for ProgramStart {
+    fn default() -> Self {
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("failed to get current unix time")
+            .as_secs();
+
+        let ts = i64::try_from(ts).expect("current unix seconds doesn't fit i64");
+
+        Self(ts)
+    }
+}
+
+impl Deref for ProgramStart {
+    type Target = i64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }

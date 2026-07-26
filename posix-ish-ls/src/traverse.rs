@@ -2,7 +2,7 @@ use crate::{
     arg::{FollowLinks, ProgramBehavior},
     file::{FileInfo, FileType},
 };
-use posix_ish_utils::error::{Result, ToLsResult};
+use posix_ish_utils::error::{Result, ToPosixishResult};
 use std::{
     collections::{HashMap, HashSet},
     ffi::{OsStr, OsString},

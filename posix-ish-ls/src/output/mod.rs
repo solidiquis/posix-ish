@@ -9,6 +9,8 @@ use posix_ish_utils::{error::Result, tty};
 mod file;
 use file::Formatter;
 
+mod long;
+
 /// Sorts, filters, and prints.
 pub fn print(mut entries: Vec<FileInfo>, pb: &ProgramBehavior) -> Result<()> {
     let colorizer = init_colorizer()?;
@@ -48,12 +50,13 @@ pub fn print(mut entries: Vec<FileInfo>, pb: &ProgramBehavior) -> Result<()> {
         Sort::Alphabetical => {
             entries.sort_unstable_by(|a, b| a.name.cmp(&b.name));
         }
-        Sort::None => entries.reverse(),
+        Sort::None if pb.reverse_sort => entries.sort_unstable_by(|a, b| b.name.cmp(&a.name)),
+        Sort::None => entries.sort_unstable_by(|a, b| a.name.cmp(&b.name)),
     }
 
     let out = match &pb.output_format {
         OutputFormat::CommaSeparated => comma_separated(&entries, &pb, &colorizer)?,
-        OutputFormat::Long(opts) => long(&entries, opts, &colorizer)?,
+        OutputFormat::Long(opts) => long(&pb, &entries, opts, &colorizer)?,
         OutputFormat::TableRowMajor => tabular(&entries, &pb, &colorizer, false)?,
         OutputFormat::TableColumnMajor => tabular(&entries, &pb, &colorizer, true)?,
         OutputFormat::OneEntryPerLine => one_entry_per_line(&entries, &pb, &colorizer)?,
@@ -65,8 +68,25 @@ pub fn print(mut entries: Vec<FileInfo>, pb: &ProgramBehavior) -> Result<()> {
 }
 
 /// `-l`
-fn long(entries: &[FileInfo], opts: &Long, colorizer: &Box<dyn Colorizer>) -> Result<String> {
-    todo!()
+fn long(
+    pb: &ProgramBehavior,
+    entries: &[FileInfo],
+    opt: &Long,
+    colorizer: &Box<dyn Colorizer>,
+) -> Result<String> {
+    let formatter = Formatter::new_long_layout(pb, colorizer, &entries, opt.clone());
+    let mut out = String::new();
+    for i in 0..entries.len() {
+        let Some(formatted) = formatter.get_formatted(i) else {
+            break;
+        };
+        out.push_str(&formatted.trim_end());
+
+        if i < entries.len() - 1 {
+            out.push('\n');
+        }
+    }
+    Ok(out)
 }
 
 /// `-m`

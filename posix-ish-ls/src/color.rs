@@ -1,6 +1,6 @@
 use crate::file::{FileInfo, FileType};
 use posix_ish_utils::{
-    error::{Result, ToLsResult},
+    error::{Result, ToPosixishResult},
     tty,
 };
 use std::env;

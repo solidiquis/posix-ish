@@ -5,7 +5,7 @@ use std::{
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub trait ToLsResult<T> {
+pub trait ToPosixishResult<T> {
     fn invalid_argument<S: Into<String>>(self, msg: S) -> Result<T>;
     fn io_error<S: Into<String>>(self, msg: S) -> Result<T>;
     fn internal<S: Into<String>>(self, msg: S) -> Result<T>;
@@ -98,7 +98,7 @@ impl Display for Code {
     }
 }
 
-impl<T, E> ToLsResult<T> for std::result::Result<T, E>
+impl<T, E> ToPosixishResult<T> for std::result::Result<T, E>
 where
     E: std::error::Error + 'static,
 {
@@ -136,7 +136,7 @@ where
     }
 }
 
-impl<T> ToLsResult<T> for Option<T> {
+impl<T> ToPosixishResult<T> for Option<T> {
     fn invalid_argument<S: Into<String>>(self, msg: S) -> Result<T> {
         match self {
             Some(val) => Ok(val),
