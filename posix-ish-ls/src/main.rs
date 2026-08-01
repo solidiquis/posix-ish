@@ -3,10 +3,8 @@ use std::process::ExitCode;
 
 mod arg;
 mod color;
-mod file;
+mod fs;
 mod output;
-mod traverse;
-use traverse::traverse;
 
 const BIN_NAME: &str = "ls";
 
@@ -31,9 +29,11 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
+    let colorizer = color::init_colorizer()?;
+
     for dir in operands {
-        let entries = traverse(&dir, &pb)?;
-        output::print(entries, &pb)?;
+        let entries = fs::traverse(&dir, &pb)?;
+        output::print(entries, &pb, colorizer.as_ref())?;
     }
 
     Ok(())

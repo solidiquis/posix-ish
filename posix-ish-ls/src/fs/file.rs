@@ -1,9 +1,12 @@
 use crate::arg::{FollowLinks, OutputFormat, ProgramBehavior, Sort};
-use posix_ish_utils::error::{Error, Result, ToPosixishResult};
+use posix_ish_utils::{
+    error::{Error, Result, ToPosixishResult},
+    fs::file::FileType,
+};
 use std::{
     ffi::OsStr,
     fs::{self, DirEntry, Metadata},
-    os::unix::fs::{FileTypeExt, MetadataExt},
+    os::unix::fs::MetadataExt,
     path::PathBuf,
 };
 
@@ -24,19 +27,6 @@ pub struct FileInfo {
     pub mtime: i64,
     pub ctime: i64,
     pub len: u64,
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
-pub enum FileType {
-    File,
-    Dir,
-    SymLink,
-    BlockDev,
-    CharDev,
-    Fifo,
-    Socket,
-    #[default]
-    Unknown,
 }
 
 impl FileInfo {
@@ -186,28 +176,6 @@ impl TryFrom<(&OsStr, &Metadata, &ProgramBehavior)> for FileInfo {
             ctime,
             len,
         })
-    }
-}
-
-impl From<std::fs::FileType> for FileType {
-    fn from(ft: std::fs::FileType) -> Self {
-        if ft.is_file() {
-            Self::File
-        } else if ft.is_dir() {
-            Self::Dir
-        } else if ft.is_symlink() {
-            Self::SymLink
-        } else if ft.is_block_device() {
-            Self::BlockDev
-        } else if ft.is_char_device() {
-            Self::CharDev
-        } else if ft.is_fifo() {
-            Self::Fifo
-        } else if ft.is_socket() {
-            Self::Socket
-        } else {
-            Self::Unknown
-        }
     }
 }
 

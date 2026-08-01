@@ -1,8 +1,11 @@
 use crate::{
     arg::{FollowLinks, ProgramBehavior},
-    file::{FileInfo, FileType},
+    fs::file::FileInfo,
 };
-use posix_ish_utils::error::{Result, ToPosixishResult};
+use posix_ish_utils::{
+    error::{Result, ToPosixishResult},
+    fs::file::FileType,
+};
 use std::{
     collections::{HashMap, HashSet},
     ffi::{OsStr, OsString},
@@ -13,6 +16,8 @@ struct DirTraverseState {
     path: OsString,
     reader: ReadDir,
 }
+
+pub mod file;
 
 /// Traverse `root` and gather all the relevant file information based the [ProgramBehavior].
 /// This function will not sort nor filter - we leave that to be handled downstream.

@@ -1,11 +1,14 @@
 use crate::{
     arg::{Long, ProgramBehavior},
     color::Colorizer,
-    file::{FileInfo, FileType},
-    output::long,
+    fs::file::FileInfo,
+    output::time::mtime,
 };
 use posix_ish_utils::{
-    fs::{get_group, get_owner},
+    fs::{
+        file::{FileType, rwx},
+        get_group, get_user,
+    },
     size::{apparent_human_bin, apparent_human_si},
 };
 
@@ -149,7 +152,7 @@ impl<'a> Formatter<'a> {
         match &self.format {
             Format::Long(opt) => {
                 // Mode column is fixed width in terminal
-                entry.mode = long::mode(&info.file_type, info.mode);
+                entry.mode = rwx(&info.file_type, info.mode);
 
                 let links = format!("{}", info.nlink);
                 let link_len = links.len();
@@ -167,7 +170,7 @@ impl<'a> Formatter<'a> {
                     entry.group = g;
                     self.max_group_physical_width = self.max_group_physical_width.max(g_len);
                 } else {
-                    let o = get_owner(info.uid).unwrap_or_else(|_| String::from("-"));
+                    let o = get_user(info.uid).unwrap_or_else(|_| String::from("-"));
                     let o_len = o.len();
                     entry.owner = o;
                     self.max_owner_physical_width = self.max_owner_physical_width.max(o_len);
@@ -190,7 +193,7 @@ impl<'a> Formatter<'a> {
                 self.max_len_physical_width = self.max_len_physical_width.max(len_len);
 
                 // mtime column is fixed width in terminal
-                entry.mtime = long::mtime(info.mtime, self.pb.program_start);
+                entry.mtime = mtime(info.mtime, self.pb.program_start);
             }
             Format::Tabular => {
                 // Pad for tailing white space

@@ -1,7 +1,7 @@
 use crate::{
     arg::{IncludeAll, Long, OutputFormat, ProgramBehavior, Sort},
-    color::{Colorizer, init_colorizer},
-    file::FileInfo,
+    color::Colorizer,
+    fs::file::FileInfo,
 };
 use posix_ish_utils::{error::Result, tty};
 
@@ -9,12 +9,15 @@ use posix_ish_utils::{error::Result, tty};
 mod file;
 use file::Formatter;
 
-mod long;
+// See the [STDOUT](https://pubs.opengroup.org/onlinepubs/009695099/utilities/ls.html) section.
+mod time;
 
 /// Sorts, filters, and prints.
-pub fn print(mut entries: Vec<FileInfo>, pb: &ProgramBehavior) -> Result<()> {
-    let colorizer = init_colorizer()?;
-
+pub fn print(
+    mut entries: Vec<FileInfo>,
+    pb: &ProgramBehavior,
+    colorizer: &dyn Colorizer,
+) -> Result<()> {
     // Filter
     entries.retain_mut(|dent| matches!(pb.include_all, IncludeAll::ExcludeHidden) && !dent.hidden);
 
@@ -55,11 +58,11 @@ pub fn print(mut entries: Vec<FileInfo>, pb: &ProgramBehavior) -> Result<()> {
     }
 
     let out = match &pb.output_format {
-        OutputFormat::CommaSeparated => comma_separated(&entries, pb, colorizer.as_ref())?,
-        OutputFormat::Long(opts) => long(pb, &entries, opts, colorizer.as_ref())?,
-        OutputFormat::TableRowMajor => tabular(&entries, pb, colorizer.as_ref(), false)?,
-        OutputFormat::TableColumnMajor => tabular(&entries, pb, colorizer.as_ref(), true)?,
-        OutputFormat::OneEntryPerLine => one_entry_per_line(&entries, pb, colorizer.as_ref())?,
+        OutputFormat::CommaSeparated => comma_separated(&entries, pb, colorizer)?,
+        OutputFormat::Long(opts) => long(pb, &entries, opts, colorizer)?,
+        OutputFormat::TableRowMajor => tabular(&entries, pb, colorizer, false)?,
+        OutputFormat::TableColumnMajor => tabular(&entries, pb, colorizer, true)?,
+        OutputFormat::OneEntryPerLine => one_entry_per_line(&entries, pb, colorizer)?,
     };
 
     println!("{out}");

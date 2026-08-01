@@ -1,7 +1,10 @@
 use crate::error::{Error, Result};
 use std::ffi::CStr;
 
-pub fn get_owner(uid: u32) -> Result<String> {
+pub mod file;
+
+/// Get user from user ID
+pub fn get_user(uid: u32) -> Result<String> {
     unsafe {
         let ptr = libc::getpwuid(libc::uid_t::from(uid));
 
@@ -18,6 +21,8 @@ pub fn get_owner(uid: u32) -> Result<String> {
         Ok(c_str.to_string_lossy().into_owned())
     }
 }
+
+/// Get group from group ID
 pub fn get_group(gid: u32) -> Result<String> {
     unsafe {
         let ptr = libc::getgrgid(libc::gid_t::from(gid));

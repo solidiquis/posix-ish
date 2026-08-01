@@ -1,6 +1,7 @@
-use crate::file::{FileInfo, FileType};
+use crate::fs::file::FileInfo;
 use posix_ish_utils::{
     error::{Result, ToPosixishResult},
+    fs::file::FileType,
     tty,
 };
 use std::env;
